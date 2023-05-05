@@ -34,26 +34,12 @@ helpers do
     begin
       IO.write(sigpath, sig)
       IO.write(msgpath, msg)
-      IO.write(signerspath, identity + " " + key + "\n")
-
-      status = Open3.popen3(
-        "ssh-keygen",
-        "-Y", "verify",
-        "-n", hostnames.join(","),
-        "-s", sigpath,
-        "-I", identity,
-        "-f", signerspath
-      ) do |stdin, stdout, stderr, thr|
-        stdin.write(msg)
-        stdin.close
-        stderr.close
-        stdout.close
-        thr.value
-      end
-
-      return status == 0
+      IO.write(signerspath, identity + " " + key.split(" ")[0..1].join(" ") + "\n")
+      cmdline = %Q{cat "#{msgpath}" | ssh-keygen -Y verify -n "#{hostnames.join(",")}" -s "#{sigpath}" -I "#{identity}" -f "#{signerspath}"}
+      %x{#{cmdline}}
+      $?.to_i == 0
     ensure
-      # [sigpath, msgpath, signerspath].each { |p| File.unlink(p) rescue nil }
+      [sigpath, msgpath, signerspath].each { |p| File.unlink(p) rescue nil }
     end
   end
 
@@ -61,15 +47,15 @@ helpers do
     line_length = 70.0
     num_lines = (signature.length / line_length).ceil
     lines = num_lines.times.map { |n| signature[line_length*n ... line_length*(n+1)] }
-    ["-----BEGIN SSH SIGNATURE-----", *lines, "-----END SSH SIGNATURE-----"] .join("\n")
+    ["-----BEGIN SSH SIGNATURE-----", *lines, "-----END SSH SIGNATURE-----", ""] .join("\n")
   end
 
   def parse_request!(reqbody)
-    puts reqbody
     hash = Digest::SHA256.hexdigest(reqbody)
     signed, unsigned = reqbody.split("\n\n")
     halt 400, "need signed and unsigned section" unless signed && unsigned
 
+    signed += "\n"
     signed_lines   = signed.split("\n")
     unsigned_lines = unsigned.split("\n")
 
@@ -83,7 +69,7 @@ helpers do
     parsed = {
       hostname:       hostnames.first,
       hostnames:      hostnames,
-      identity:       hostnames.first,
+      identity:       "unityca-#{signed_lines[1]}@#{hostnames.first}",
       timestamp:      Time.at(signed_lines[1].to_i*1e-3),
       new_pubkey:     signed_lines[2],
       old_pubkey:     signed_lines[3],
@@ -101,7 +87,7 @@ helpers do
   end
 
   def current_host_key(hostname, type)
-    path = "hosts/#{hostname}/#{type}.pub"
+    path = "hosts/#{hostname}/ssh_host_#{type}_key.pub"
     File.exists?(path) ? IO.read(path).strip : nil
   end
 
@@ -117,19 +103,29 @@ helpers do
   def grant_certificate(parsed)
     path_new = "hosts/#{parsed[:hostname]}/ssh_host_#{parsed[:new_type]}_key.pub"
     path_old = "hosts/#{parsed[:hostname]}/ssh_host_#{parsed[:old_type]}_key.pub"
+    cert_new = path_new[0..-5] + "-cert.pub"
+    cert_old = path_old[0..-5] + "-cert.pub"
 
+    `mkdir -p "#{File.dirname(path_new)}"`
     IO.write(path_new, parsed[:new_pubkey])
-    `ssh-keygen -h -s "#{HOST_CA_KEY}" -I "#{parsed[:identity]}" -n "#{parsed[:hostnames]}" -V "#{HOST_CERT_VALIDITY}" "#{path}"`
-    `rm -f "#{secondary_path_old}"` unless secondary_path_new == secondary_path_old
+    `ssh-keygen -h -s "#{HOST_CA_KEY}" -I "#{parsed[:identity]}" -n "#{parsed[:hostnames]}" -V "#{HOST_CERT_VALIDITY}" "#{path_new}"`
+    `rm -f "#{path_old}"` unless path_new == path_old
+    `rm -f "#{cert_old}"` unless cert_new == cert_old
 
     parsed[:hostnames][1..-1].each do |hostname|
       secondary_path_new = "hosts/#{hostname}/ssh_host_#{parsed[:new_type]}_key.pub"
       secondary_path_old = "hosts/#{hostname}/ssh_host_#{parsed[:old_type]}_key.pub"
+      secondary_cert_new = secondary_path_new[0..-5] + "-cert.pub"
+      secondary_cert_old = secondary_path_old[0..-5] + "-cert.pub"
+
+      `mkdir -p "#{File.dirname(secondary_path_new)}"`
       `cp "#{path_new}" "#{secondary_path_new}"`
+      `cp "#{cert_new}" "#{secondary_cert_new}"`
       `rm -f "#{secondary_path_old}"` unless secondary_path_new == secondary_path_old
+      `rm -f "#{secondary_cert_old}"` unless secondary_cert_new == secondary_cert_old
     end
 
-    IO.read(path_new)
+    IO.read(path_new[0..-5] + "-cert.pub")
   end
 end
 
@@ -144,7 +140,7 @@ post '/host' do
     content_type :certificate
     grant_certificate(parsed)
   else
-    IO.write("#{parsed[:hostname]}/#{parsed[:new_pubkey_type]}.pub.proposed", parsed[:new_pubkey])
+    IO.write("hosts/#{parsed[:hostname]}/ssh_host_#{parsed[:new_type]}_key.pub.proposed", parsed[:new_pubkey])
     halt 409
   end
 end
