@@ -11,7 +11,7 @@ if [ ! command -v curl >/dev/null 2>&1 ]; then
 			exit 1
 		fi
 	elif [ command -v yum >/dev/null 2>&1 ]; then
-		# linux, debian based
+		# linux, red hat based
 		yum install -y curl
 		if [ ! $? -eq 0 ]; then
 			echo "Unable to install curl."
@@ -25,6 +25,7 @@ if [ ! command -v curl >/dev/null 2>&1 ]; then
 			exit 1
 		fi
 	else
+		# well shucks
 		echo "Need curl."
 		exit 1
 	fi
