@@ -25,6 +25,22 @@ not_found do
 end
 
 helpers do
+  def logmsg(msg, caller_offset=0)
+    ref = caller[caller_offset]
+    file, line, func = ref.split(":")
+
+    printf("%s: %s:%d -- %s\n",
+      Time.now.strftime("%Y-%m-%d %H:%M:%S"),
+      file,
+      line,
+      msg);
+  end
+
+  def reject(status, msg)
+    logmsg("Rejecting with #{status}: #{msg}", 1)
+    halt status, msg
+  end
+
   def valid_signature?(msg, sig, key, identity, hostnames)
     rng = rand(10**9)
     sigpath     = "/tmp/unityca.tmpsig.#{rng}"
@@ -51,18 +67,19 @@ helpers do
   end
 
   def parse_request!(reqbody)
+    logmsg reqbody
     hash = Digest::SHA256.hexdigest(reqbody)
     signed, unsigned = reqbody.split("\n\n")
-    halt 400, "need signed and unsigned section" unless signed && unsigned
+    reject 400, "need signed and unsigned section" unless signed && unsigned
 
     signed += "\n"
     signed_lines   = signed.split("\n")
     unsigned_lines = unsigned.split("\n")
 
-      signed_lines.count >= 4 or halt 400, "expect >= 4 lines in signed section"
-    unsigned_lines.count >= 2 or halt 400, "expect >= 2 lines in unsigned section"
-    signed_lines[0].downcase.match(/^[a-z0-9,\-\.]+$/) or halt 400, "expect valid hostname in first line of signed section"
-    signed_lines[1].match(/^\d+$/) or halt 400, "expect valid millisecond timestamp in second line of signed section"
+      signed_lines.count >= 4 or reject 400, "expect >= 4 lines in signed section"
+    unsigned_lines.count >= 2 or reject 400, "expect >= 2 lines in unsigned section"
+    signed_lines[0].downcase.match(/^[a-z0-9,\-\.]+$/) or reject 400, "expect valid hostname in first line of signed section"
+    signed_lines[1].match(/^\d+$/) or reject 400, "expect valid millisecond timestamp in second line of signed section"
 
     hostnames = signed_lines[0].split(",")
 
@@ -79,9 +96,9 @@ helpers do
       old_type:       signed_lines[3].split(" ").first.split("-")[1],
     }
 
-    parsed[:old_type] == parsed[:new_type] && parsed[:new_type] == "ed25519" or halt 400, "only ed25519 supported" # security issues in supporting multiple key types; address these before relaxing this requirement
-    valid_signature?(signed, parsed[:new_pubkey_sig], parsed[:new_pubkey], parsed[:identity], parsed[:hostnames]) or halt 400, "invalid newkey signature"
-    valid_signature?(signed, parsed[:old_pubkey_sig], parsed[:old_pubkey], parsed[:identity], parsed[:hostnames]) or halt 400, "invalid oldkey signature"
+    parsed[:old_type] == parsed[:new_type] && parsed[:new_type] == "ed25519" or reject 400, "only ed25519 supported" # security issues in supporting multiple key types; address these before relaxing this requirement
+    valid_signature?(signed, parsed[:new_pubkey_sig], parsed[:new_pubkey], parsed[:identity], parsed[:hostnames]) or reject 400, "invalid newkey signature"
+    valid_signature?(signed, parsed[:old_pubkey_sig], parsed[:old_pubkey], parsed[:identity], parsed[:hostnames]) or reject 400, "invalid oldkey signature"
 
     parsed
   end
@@ -141,7 +158,7 @@ post '/host' do
     grant_certificate(parsed)
   else
     IO.write("hosts/#{parsed[:hostname]}/ssh_host_#{parsed[:new_type]}_key.pub.proposed", parsed[:new_pubkey])
-    halt 409
+    reject 409
   end
 end
 
@@ -152,11 +169,11 @@ end
 
 get '/user_ca.pub' do
   content_type :public_key
-  send_file(USER_CA_FILE + ".pub")
+  send_file(USER_CA_KEY + ".pub")
 end
 
 get '/scripts/:script' do |script|
   path = File.join(SCRIPTS_FOLDER, script)
-  halt 404 unless File.readable?(path)
+  reject 404 unless File.readable?(path)
   send_file(path)
 end

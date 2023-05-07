@@ -1,21 +1,21 @@
 #!/bin/bash
 
-URL="http://localhost:8080/host"
-HOSTNAME="turing.kobalabs.net"
-BONUSHOSTNAMES=",turing.unitymath.io"
+UNITYCA_URL="http://localhost:8080/host"
+HOSTNAMES="turing.kobalabs.net,turing.unitymath.io"
+IDENTITY_HOSTNAME="turing.kobalabs.net"
 HOSTNAMES="$HOSTNAME$BONUSHOSTNAMES"
 TIMESTAMP=`date +%s%N | cut -b1-13 | tr -d "\n"`
-KEYFILE="/tmp/testkey.unityca"
-KEYFILE_PUB="$KEYFILE.pub"
-IDENTITY="unityca-$TIMESTAMP@$HOSTNAME"
+KEYFILE_PRIV="/tmp/testkey.unityca"
+KEYFILE_PUB="$KEYFILE_PRIV.pub"
+IDENTITY="unityca-$TIMESTAMP@$IDENTITY_HOSTNAME"
 
 SIGFILE="/tmp/signature.unityca"
 SIGNERSFILE="/tmp/allowed_signers.unityca"
 TESTFILE_BASE="/tmp/request.unityca"
 TESTFILE_NOSIG="$TESTFILE_BASE.signed_part"
 
-if [ ! -e $KEYFILE ]; then
-	ssh-keygen -f "$KEYFILE" -t ed25519 -N "" >/dev/null
+if [ ! -e $KEYFILE_PRIV ]; then
+	ssh-keygen -f "$KEYFILE_PRIV" -t ed25519 -N "" >/dev/null
 fi
 
 (echo $HOSTNAMES  ; \
@@ -27,7 +27,7 @@ fi
 (   cat "$TESTFILE_NOSIG" \
   | ssh-keygen -Y sign \
                -I "$IDENTITY" \
-               -f "$KEYFILE" \
+               -f "$KEYFILE_PRIV" \
                -n "$HOSTNAMES" \
                - \
                2>/dev/null \
@@ -39,18 +39,18 @@ SIGNATURE=`( \
 	| head -n -1 \
 	| tr -d "\n" \
 	; echo)`
-(echo -n "$IDENTITY " ; cat $KEYFILE_PUB | cut -d' ' -f1,2) > $SIGNERSFILE
-(cat "$TESTFILE_NOSIG" ; echo ; echo $SIGNATURE ; echo $SIGNATURE) > "$TESTFILE_BASE"
+(echo -n "$IDENTITY " ; cat "$KEYFILE_PUB" | cut -d' ' -f1,2) > $SIGNERSFILE
+(cat "$TESTFILE_NOSIG" ; echo ; echo "$SIGNATURE" ; echo "$SIGNATURE") > "$TESTFILE_BASE"
 (cat "$TESTFILE_NOSIG" | ssh-keygen -Y verify \
+                                    -I "$IDENTITY" \
                                     -n "$HOSTNAMES" \
                                     -s "$SIGFILE" \
-                                    -I "$IDENTITY" \
                                     -f "$SIGNERSFILE")
 
 if [[ $? -eq 0 ]]; then
     rm -f /tmp/unityca.tmp*
     echo "Signature constructed and verified. Sending request."
-    curl -sv -X POST --data-binary "@$TESTFILE_BASE" "$URL"
+    curl -sv -X POST --data-binary "@$TESTFILE_BASE" "$UNITYCA_URL"
     if [[ ! $? -eq 0 ]]; then
         exit 1
     fi
