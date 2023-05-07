@@ -13,7 +13,7 @@ if [ -z "$FQDN" ]; then
 fi
 
 if [ -z "$UNITYCA_URL" ]; then
-	UNITYCA_URL="https://ca.kobalabs.net/host"
+	UNITYCA_URL="https://ca.kobalabs.net"
 fi
 
 if [ -z "$HOSTNAMES" ]; then
