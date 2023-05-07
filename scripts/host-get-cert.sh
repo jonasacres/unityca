@@ -5,7 +5,6 @@
 # always shows fqdn.
 
 if [ -z "$FQDN" ]; then
-	echo "No FQDN: $FQDN"
 	FQDN=`hostname -f 2>/dev/null`
 	if [ ! $? -eq 0 ]; then
 		FQDN=`hostname`
@@ -62,7 +61,6 @@ SIGNATURE=`  echo "$SIGNED_PART" \
            | head -n -1 \
            | tr -d "\n"`
 REQUEST=$(echo "$SIGNED_PART" ; echo ; echo "$SIGNATURE" ; echo "$SIGNATURE")
-echo "$REQUEST"
 
 # now issue the request and (hopefully) get our certificate...
 echo "Requesting certificate ($UNITYCA_URL)..."

@@ -39,7 +39,7 @@ if [ -z "$SSHD_CONFIG" ]; then
 	SSHD_CONFIG="/etc/ssh/sshd_config"
 fi
 
-if [ -z "DEFAULT_TRUSTED_USER_CA_KEYS" ]; then
+if [ -z "$DEFAULT_TRUSTED_USER_CA_KEYS" ]; then
 	DEFAULT_TRUSTED_USER_CA_KEYS="/etc/ssh/trusted_user_ca_keys"
 fi
 
