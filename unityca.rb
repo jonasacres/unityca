@@ -91,6 +91,7 @@ helpers do
     hostnames = signed_lines[0].split(",")
 
     parsed = {
+      remote_addr:    request.ip,
       hostname:       hostnames.first,
       hostnames:      hostnames,
       identity:       "unityca-#{signed_lines[1]}@#{hostnames.first}",
@@ -116,6 +117,24 @@ helpers do
   end
 
   def acceptable?(parsed)
+    acceptable_timestamp?(parsed) && acceptable_hosts?(parsed) && acceptable_keys?(parsed)
+  end
+
+  def acceptable_timestamp?(parsed)
+    time_delta = Time.now - parsed[:timestamp]
+    return false if time_delta  >   60.0 # timestamps should be no more than 60s in to the future
+    return false if time_delta <= -300.0 # timestamps should be no more than 5m into the past
+    true
+  end
+
+  def acceptable_hosts?(parsed)
+    parsed[:hostnames].each do |hostname|
+      actual_ip = Resolv.getaddress(hostname)
+      return false unless actual_ip == parsed[:remote_addr]
+    end
+  end
+
+  def acceptable_keys?(parsed)
     parsed[:hostnames].each do |hostname|
       current_key = current_host_key(hostname, parsed[:new_type])
       return false unless [nil, parsed[:old_pubkey], parsed[:new_pubkey]].include?(current_key)
