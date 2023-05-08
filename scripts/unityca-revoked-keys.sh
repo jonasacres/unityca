@@ -1,5 +1,20 @@
 #!/bin/sh
 
+cmd_exists()
+{
+  command -v "$1" >/dev/null 2>&1
+}
+
+if cmd_exists curl; then
+  CURL="curl"
+elif cmd_exists /usr/local/bin/curl; then
+  CURL="/usr/local/bin/curl"
+elif cmd_exists /usr/bin/curl; then
+  CURL="/usr/bin/curl"
+else
+  echo "Unable to locate curl"
+fi
+
 [ -z "$UNITYCA_URL" ] && UNITYCA_URL="https://ca.kobalabs.net"
 [ -z "$SSHD_CONFIG" ] && SSHD_CONFIG="/etc/ssh/sshd_config"
 [ -z "$DEFAULT_REVOKED_KEYS" ] && DEFAULT_REVOKED_KEYS="/etc/ssh/sshd_revoked_keys"
@@ -29,7 +44,7 @@ fi
 touch "$REVOKED_KEYS"
 
 
-SERVER_REVOKED_LIST=$(curl -s --fail "$UNITYCA_URL/revoked" 2>/dev/null)
+SERVER_REVOKED_LIST=$("$CURL" -s --fail "$UNITYCA_URL/revoked" 2>/dev/null)
 if [ ! $? -eq 0 ]; then
   echo "Encountered error querying for $UNITYCA_URL/revoked"
   exit 1

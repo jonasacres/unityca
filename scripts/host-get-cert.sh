@@ -1,5 +1,20 @@
 #!/bin/sh
 
+cmd_exists()
+{
+  command -v "$1" >/dev/null 2>&1
+}
+
+if cmd_exists curl; then
+  CURL="curl"
+elif cmd_exists /usr/local/bin/curl; then
+  CURL="/usr/local/bin/curl"
+elif cmd_exists /usr/bin/curl; then
+  CURL="/usr/bin/curl"
+else
+  echo "Unable to locate curl"
+fi
+
 # get the FQDN. Linux has -f option on the hostname command to get fqdn,
 # and just shows hostname by default. OpenBSD has no such option, and
 # always shows fqdn.
@@ -47,7 +62,7 @@ REQUEST=$(echo "$SIGNED_PART" ; echo ; echo "$SIGNATURE" ; echo "$SIGNATURE")
 
 # now issue the request and (hopefully) get our certificate...
 echo "Requesting certificate ($UNITYCA_URL)..."
-CERTIFICATE=$(echo "$REQUEST" | curl -s -X POST --data-binary @- --fail "$UNITYCA_URL/host" 2>/dev/null)
+CERTIFICATE=$(echo "$REQUEST" | "$CURL" -s -X POST --data-binary @- --fail "$UNITYCA_URL/host" 2>/dev/null)
 
 if [ $? -eq 0 ]; then
 	echo $CERTIFICATE > $KEYFILE_CERT

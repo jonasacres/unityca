@@ -1,6 +1,6 @@
 #!/bin/sh
 
-exists()
+cmd_exists()
 {
   command -v "$1" >/dev/null 2>&1
 }
@@ -116,10 +116,10 @@ do
 done
 
 # now restart sshd
-if exists systemctl; then
+if cmd_exists systemctl; then
 	# systemd-based linux
 	systemctl restart sshd
-elif exists rcctl; then
+elif cmd_exists rcctl; then
 	# openbsd
 	rcctl restart sshd
 else
