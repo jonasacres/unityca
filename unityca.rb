@@ -129,7 +129,7 @@ helpers do
 
     `mkdir -p "#{File.dirname(path_new)}"`
     IO.write(path_new, parsed[:new_pubkey])
-    `ssh-keygen -h -s "#{HOST_CA_KEY}" -I "#{parsed[:identity]}" -n "#{parsed[:hostnames]}" -V "#{HOST_CERT_VALIDITY}" "#{path_new}"`
+    `ssh-keygen -h -s "#{HOST_CA_KEY}" -I "#{parsed[:identity]}" -n "#{parsed[:hostnames].join(",")}" -V "#{HOST_CERT_VALIDITY}" "#{path_new}"`
     `rm -f "#{path_old}"` unless path_new == path_old
     `rm -f "#{cert_old}"` unless cert_new == cert_old
 
