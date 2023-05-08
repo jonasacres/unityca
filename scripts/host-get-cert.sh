@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # get the FQDN. Linux has -f option on the hostname command to get fqdn,
 # and just shows hostname by default. OpenBSD has no such option, and
@@ -35,7 +35,11 @@ if [ -z "$KEYFILE_PUB" ]; then
 	KEYFILE_PUB="$KEYFILE_PRIV.pub"
 fi
 
-TIMESTAMP=`date +%s%N | cut -b1-13`
+if [ -z "$SSHD_CONFIG" ]; then
+	SSHD_CONFIG="/etc/ssh/sshd_config"
+fi
+
+TIMESTAMP=`date +%s`
 IDENTITY="unityca-$TIMESTAMP@$IDENTITY_HOSTNAME"
 
 # generate a key if we don't have one yet...
@@ -57,10 +61,10 @@ SIGNATURE=`  echo "$SIGNED_PART" \
                         -n "$HOSTNAMES" \
                         - \
                         2>/dev/null \
-           | tail +2 \
-           | head -n -1 \
+           | grep -v "SIGNATURE" \
            | tr -d "\n"`
 REQUEST=$(echo "$SIGNED_PART" ; echo ; echo "$SIGNATURE" ; echo "$SIGNATURE")
+echo "$REQUEST" > /tmp/request
 
 # now issue the request and (hopefully) get our certificate...
 echo "Requesting certificate ($UNITYCA_URL)..."
@@ -72,4 +76,11 @@ if [ $? -eq 0 ]; then
 else
 	echo "Server returned error"
 	exit 1
+fi
+
+# now do the HostCertificate line...
+HOST_CERTIFICATE=`cat "$SSHD_CONFIG" | grep -E "^HostCertificate " | cut -d' ' -f2 | head -1`
+if [ -z "$HOST_CERTIFICATE" ]; then
+	echo "Adding to $SSHD_CONFIG: HostCertificate $KEYFILE_CERT"
+	echo "HostCertificate $KEYFILE_CERT" >> "$SSHD_CONFIG"
 fi

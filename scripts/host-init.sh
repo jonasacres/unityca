@@ -1,5 +1,10 @@
 #!/bin/sh
 
+exists()
+{
+  command -v "$1" >/dev/null 2>&1
+}
+
 # we need curl to continue; check if it exists
 # if not, try to find the appropriate package manager and install
 if [ ! command -v curl >/dev/null 2>&1 ]; then
@@ -95,3 +100,14 @@ do
 	echo "Retrying ($HOST_GET_CERT_PATH)..."
 	sleep 1
 done
+
+# now restart sshd
+if exists systemctl; then
+	# systemd-based linux
+	systemctl restart sshd
+elif exists rcctl; then
+	# openbsd
+	rcctl restart sshd
+else
+	echo "Not sure how to restart SSHD on this system; you'll need to do that..."
+fi

@@ -1,15 +1,19 @@
-#!/usr/bin/ruby
+#!/usr/bin/env ruby
 
 require 'sinatra'
 require 'open3'
 
-UNITYCA_DIR        = "." # directory for process execution; other paths are relative to this
+
+UNITYCA_DIR        = File.dirname(__FILE__) # directory for process execution; other paths are relative to this
 HOST_CA_KEY        = "keys/host_ca_key" # path to CA file for signing host keys; must be passwordless!
 USER_CA_KEY        = "keys/user_ca_key" # path to CA file for signing user keys; must be passwordless!
 SCRIPTS_FOLDER     = "scripts"     # path to folder with client scripts (everything here is served as GET /scripts/*)
 HOST_CERT_VALIDITY = "+1w" # passed as ssh-keygen -V argument, eg. "+52w" for 1-year
+PIDFILE            = "unityca.pid"
 
 Dir.chdir(UNITYCA_DIR)
+IO.write(PIDFILE, Process.pid)
+at_exit { (File.unlink(PIDFILE) rescue nil) if Process.pid == IO.read(PIDFILE) }
 
 set :port, 8080
 set :bind, "0.0.0.0"
@@ -87,7 +91,7 @@ helpers do
       hostname:       hostnames.first,
       hostnames:      hostnames,
       identity:       "unityca-#{signed_lines[1]}@#{hostnames.first}",
-      timestamp:      Time.at(signed_lines[1].to_i*1e-3),
+      timestamp:      Time.at(signed_lines[1].to_i),
       new_pubkey:     signed_lines[2],
       old_pubkey:     signed_lines[3],
       new_pubkey_sig: reconstitute_signature(unsigned_lines[0]),
@@ -105,7 +109,7 @@ helpers do
 
   def current_host_key(hostname, type)
     path = "hosts/#{hostname}/ssh_host_#{type}_key.pub"
-    File.exists?(path) ? IO.read(path).strip : nil
+    File.exist?(path) ? IO.read(path).strip : nil
   end
 
   def acceptable?(parsed)
@@ -158,7 +162,7 @@ post '/host' do
     grant_certificate(parsed)
   else
     IO.write("hosts/#{parsed[:hostname]}/ssh_host_#{parsed[:new_type]}_key.pub.proposed", parsed[:new_pubkey])
-    reject 409
+    reject 409, "Public key does not match existing key on file"
   end
 end
 
@@ -174,6 +178,6 @@ end
 
 get '/scripts/:script' do |script|
   path = File.join(SCRIPTS_FOLDER, script)
-  reject 404 unless File.readable?(path)
+  reject 404, "Unable to locate requested script: #{script}" unless File.readable?(path)
   send_file(path)
 end
