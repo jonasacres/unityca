@@ -129,7 +129,7 @@ helpers do
 
   def acceptable_hosts?(parsed)
     parsed[:hostnames].each do |hostname|
-      actual_ip = Resolv.getaddress(hostname)
+      actual_ip = Resolv.getaddress(hostname) rescue "NXDOMAIN"
       return false unless actual_ip == parsed[:remote_addr]
     end
   end
@@ -183,8 +183,9 @@ post '/host' do
     content_type :certificate
     grant_certificate(parsed)
   else
+    `mkdir -p "hosts/#{parsed[:hostname]}"`
     IO.write("hosts/#{parsed[:hostname]}/ssh_host_#{parsed[:new_type]}_key.pub.proposed", parsed[:new_pubkey])
-    reject 409, "Public key does not match existing key on file"
+    reject 409, "Signing request is not valid (check your timestamps, hostnames and IP)"
   end
 end
 
