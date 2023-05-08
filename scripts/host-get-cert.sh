@@ -11,33 +11,13 @@ if [ -z "$FQDN" ]; then
 	fi
 fi
 
-if [ -z "$UNITYCA_URL" ]; then
-	UNITYCA_URL="https://ca.kobalabs.net"
-fi
-
-if [ -z "$HOSTNAMES" ]; then
-	HOSTNAMES=`echo -n "$FQDN"`
-fi
-
-if [ -z "$IDENTITY_HOSTNAME" ]; then
-	IDENTITY_HOSTNAME=`echo "$HOSTNAMES" | cut -d, -f1`
-fi
-
-if [ -z "$KEYFILE_PRIV" ]; then
-	KEYFILE_PRIV="/etc/ssh/ssh_host_ed25519_key"
-fi
-
-if [ -z "$KEYFILE_CERT" ]; then
-	KEYFILE_CERT="$KEYFILE_PRIV-cert.pub"
-fi
-
-if [ -z "$KEYFILE_PUB" ]; then
-	KEYFILE_PUB="$KEYFILE_PRIV.pub"
-fi
-
-if [ -z "$SSHD_CONFIG" ]; then
-	SSHD_CONFIG="/etc/ssh/sshd_config"
-fi
+[ -z "$UNITYCA_URL" ] && UNITYCA_URL="https://ca.kobalabs.net"
+[ -z "$HOSTNAMES" ] && HOSTNAMES=`echo -n "$FQDN"`
+[ -z "$IDENTITY_HOSTNAME" ] && IDENTITY_HOSTNAME=`echo "$HOSTNAMES" | cut -d, -f1`
+[ -z "$KEYFILE_PRIV" ] && KEYFILE_PRIV="/etc/ssh/ssh_host_ed25519_key"
+[ -z "$KEYFILE_CERT" ] && KEYFILE_CERT="$KEYFILE_PRIV-cert.pub"
+[ -z "$KEYFILE_PUB" ] && KEYFILE_PUB="$KEYFILE_PRIV.pub"
+[ -z "$SSHD_CONFIG" ] && SSHD_CONFIG="/etc/ssh/sshd_config"
 
 TIMESTAMP=`date +%s`
 IDENTITY="unityca-$TIMESTAMP@$IDENTITY_HOSTNAME"
@@ -64,7 +44,6 @@ SIGNATURE=`  echo "$SIGNED_PART" \
            | grep -v "SIGNATURE" \
            | tr -d "\n"`
 REQUEST=$(echo "$SIGNED_PART" ; echo ; echo "$SIGNATURE" ; echo "$SIGNATURE")
-echo "$REQUEST" > /tmp/request
 
 # now issue the request and (hopefully) get our certificate...
 echo "Requesting certificate ($UNITYCA_URL)..."
@@ -72,7 +51,7 @@ CERTIFICATE=$(echo "$REQUEST" | curl -s -X POST --data-binary @- --fail "$UNITYC
 
 if [ $? -eq 0 ]; then
 	echo $CERTIFICATE > $KEYFILE_CERT
-	echo "Success"
+	echo "Success (obtained fresh certificate)"
 else
 	echo "Server returned error"
 	exit 1

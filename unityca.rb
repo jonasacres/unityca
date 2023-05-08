@@ -7,6 +7,7 @@ require 'open3'
 UNITYCA_DIR        = File.dirname(__FILE__) # directory for process execution; other paths are relative to this
 HOST_CA_KEY        = "keys/host_ca_key" # path to CA file for signing host keys; must be passwordless!
 USER_CA_KEY        = "keys/user_ca_key" # path to CA file for signing user keys; must be passwordless!
+REVOKED_DIR        = "revoked/"
 SCRIPTS_FOLDER     = "scripts"     # path to folder with client scripts (everything here is served as GET /scripts/*)
 HOST_CERT_VALIDITY = "+1w" # passed as ssh-keygen -V argument, eg. "+52w" for 1-year
 PIDFILE            = "unityca.pid"
@@ -14,6 +15,8 @@ PIDFILE            = "unityca.pid"
 Dir.chdir(UNITYCA_DIR)
 IO.write(PIDFILE, Process.pid)
 at_exit { (File.unlink(PIDFILE) rescue nil) if Process.pid == IO.read(PIDFILE) }
+
+Dir.mkdir(REVOKED_DIR) unless File.exist?(REVOKED_DIR)
 
 set :port, 8080
 set :bind, "0.0.0.0"
@@ -180,4 +183,17 @@ get '/scripts/:script' do |script|
   path = File.join(SCRIPTS_FOLDER, script)
   reject 404, "Unable to locate requested script: #{script}" unless File.readable?(path)
   send_file(path)
+end
+
+get '/revoked' do
+  # putting a public key or certificate into the revocation directory should cause it to be revoked
+  all_revoked = Dir.glob(File.join(REVOKED_DIR, "*")).map do |file|
+    IO.read(file)
+      .split("\n")
+      .select { |line| line.match(/^ssh-[a-zA-Z0-9\-\.@]+ [A-Za-z0-9\+\/]+( [a-zA-Z0-9\-\.\@]+)$/) }
+  end.flatten
+
+  # list all keys sorted by domain
+  all_revoked.sort_by { |line| line.split(" ").last.split("@")[1..-1].reverse.join(".") }
+  all_revoked.join("\n")
 end

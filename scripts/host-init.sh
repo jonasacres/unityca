@@ -36,21 +36,11 @@ if [ ! command -v curl >/dev/null 2>&1 ]; then
 	fi
 fi
 
-if [ -z "$UNITYCA_URL" ]; then
-	UNITYCA_URL="https://ca.kobalabs.net"
-fi
-
-if [ -z "$SSHD_CONFIG" ]; then
-	SSHD_CONFIG="/etc/ssh/sshd_config"
-fi
-
-if [ -z "$DEFAULT_TRUSTED_USER_CA_KEYS" ]; then
-	DEFAULT_TRUSTED_USER_CA_KEYS="/etc/ssh/trusted_user_ca_keys"
-fi
-
-if [ -z "$HOST_GET_CERT_PATH" ]; then
-	HOST_GET_CERT_PATH="/sbin/host-get-cert.sh"
-fi
+[ -z "$UNITYCA_URL" ] && UNITYCA_URL="https://ca.kobalabs.net"
+[ -z "$SSHD_CONFIG" ] && SSHD_CONFIG="/etc/ssh/sshd_config"
+[ -z "$DEFAULT_TRUSTED_USER_CA_KEYS" ] && DEFAULT_TRUSTED_USER_CA_KEYS="/etc/ssh/trusted_user_ca_keys"
+[ -z "$HOST_GET_CERT_PATH" ] && HOST_GET_CERT_PATH="/sbin/host-get-cert.sh"
+[ -z "$KEY_REVOCATION_SCRIPT_PATH" ] && KEY_REVOCATION_SCRIPT_PATH="/sbin/unityca-revoked-keys.sh"
 
 # if we already have a TrustedUserCAKeys file in sshd_config, use that; otherwise, make one and add it to sshd_config
 TRUSTED_USER_CA_KEYS=`cat "$SSHD_CONFIG" | grep -E "^TrustedUserCAKeys " | cut -d' ' -f2 | head -1`
@@ -77,7 +67,7 @@ if [ -z "$EXISTING_USER_CA_KEY" ]; then
 fi
 
 # now get the host-get-cert.sh script
-curl -q --fail -o "$HOST_GET_CERT_PATH" "$UNITYCA_URL/scripts/host-get-cert.sh" 2>/dev/null
+curl -s --fail -o "$HOST_GET_CERT_PATH" "$UNITYCA_URL/scripts/host-get-cert.sh" 2>/dev/null
 if [ ! $? -eq 0 ]; then
 	echo "Failed to get $UNITYCA_URL/scripts/host-get-cert.sh"
 	exit 1
@@ -94,7 +84,31 @@ if [ -z "$EXISTING_CRONJOB" ]; then
 	(crontab -l 2>/dev/null ; echo "0 * * * * $HOST_GET_CERT_PATH") | crontab -
 fi
 
-# now run host-get-cert.sh
+# also set up the key revocation script
+curl -s --fail -o "$KEY_REVOCATION_SCRIPT_PATH" "$UNITYCA_URL/scripts/unityca-revoked-keys.sh" 2>/dev/null
+if [ ! $? -eq 0 ]; then
+	echo "Failed to get $UNITYCA_URL/scripts/unityca-revoked-keys.sh"
+	exit 1
+fi
+
+chmod +x "$KEY_REVOCATION_SCRIPT_PATH"
+
+# and revocation cronjob...
+EXISTING_CRONJOB=`crontab -l 2>/dev/null | grep "$KEY_REVOCATION_SCRIPT_PATH"`
+if [ -z "$EXISTING_CRONJOB" ]; then
+	echo "Installing cronjob ($KEY_REVOCATION_SCRIPT_PATH)..."
+	(crontab -l 2>/dev/null ; echo "* * * * * $KEY_REVOCATION_SCRIPT_PATH") | crontab -
+fi
+
+
+# now run unityca-revoked-keys.sh
+until "$KEY_REVOCATION_SCRIPT_PATH"
+do
+	echo "Retrying ($HOST_GET_CERT_PATH)..."
+	sleep 1
+done
+
+# ...and also run host-get-cert.sh
 until "$HOST_GET_CERT_PATH"
 do
 	echo "Retrying ($HOST_GET_CERT_PATH)..."
